@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+frontend/dist/
+
+# 运行数据与本地配置（凭证只进 env，绝不提交）
+backend/data/
+backend/.env
+.env
+
+# 杂项
+.DS_Store
+*.log

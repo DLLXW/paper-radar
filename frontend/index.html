@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>PaperRadar 论文雷达</title>
+  </head>
+  <body>
+    <div class="app-shell" id="appShell">
+      <aside class="global-sidebar">
+        <div class="brand">
+          <div class="brand-mark">📡</div>
+          <div>
+            <div class="brand-title">PaperRadar</div>
+            <div class="brand-subtitle">论文雷达 · 每日速递</div>
+          </div>
+        </div>
+
+        <nav class="nav-list" id="navList">
+          <button class="nav-item active" data-module-nav="digest" type="button">
+            <span class="nav-icon">📰</span>
+            <span>每日速递</span>
+          </button>
+          <button class="nav-item" data-module-nav="settings" type="button">
+            <span class="nav-icon">⚙️</span>
+            <span>设置</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="status-line" id="backendStatus">
+            <span class="status-dot pending"></span>
+            <span class="status-text">正在连接后端…</span>
+          </div>
+          <div class="next-run" id="nextRun"></div>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <!-- ============ 每日速递 ============ -->
+        <section class="module-panel active" data-module="digest">
+          <header class="workspace-head">
+            <div class="head-row">
+              <div>
+                <div class="section-kicker">Daily Digest</div>
+                <h1>每日速递</h1>
+              </div>
+              <div class="date-nav">
+                <button class="icon-button" id="prevDay" type="button" title="前一天">‹</button>
+                <input type="date" id="datePicker" />
+                <button class="icon-button" id="nextDay" type="button" title="后一天">›</button>
+                <button class="soft-button" id="todayButton" type="button">今天</button>
+              </div>
+            </div>
+            <div class="toolbar">
+              <div class="segmented" id="statusTabs">
+                <button class="seg-item active" data-status="" type="button">全部</button>
+                <button class="seg-item" data-status="new" type="button">待读</button>
+                <button class="seg-item" data-status="starred" type="button">星标</button>
+                <button class="seg-item" data-status="dismissed" type="button">已忽略</button>
+              </div>
+              <div class="toolbar-right">
+                <select id="minScore" class="select-input" title="最低分数">
+                  <option value="">全部分数</option>
+                  <option value="50">≥ 50</option>
+                  <option value="75">≥ 75</option>
+                </select>
+                <button class="soft-button" id="refreshButton" type="button">↻ 刷新</button>
+                <button class="primary-button" id="fetchButton" type="button">🛰 立即抓取</button>
+              </div>
+            </div>
+          </header>
+
+          <div id="runBanner" class="run-banner hidden"></div>
+          <div id="digestSummary" class="digest-summary"></div>
+          <div id="paperList" class="paper-list"></div>
+          <div class="list-footer">
+            <button id="loadMoreButton" class="soft-button hidden" type="button">加载更多</button>
+          </div>
+        </section>
+
+        <!-- ============ 设置 ============ -->
+        <section class="module-panel" data-module="settings">
+          <header class="workspace-head">
+            <div>
+              <div class="section-kicker">Settings</div>
+              <h1>设置</h1>
+              <p class="hero-copy">研究画像决定每天的抓取范围；服务状态一目了然。</p>
+            </div>
+          </header>
+
+          <section class="settings-grid">
+            <div class="settings-card">
+              <div class="settings-card-head">
+                <div>
+                  <div class="section-kicker">Profile</div>
+                  <h2>研究画像</h2>
+                </div>
+                <span class="hint-inline" id="profileSaved"></span>
+              </div>
+              <p class="settings-note">
+                关键词与 arXiv 分类共同决定抓取查询；排除词命中标题或摘要的论文会被过滤。修改后下一次抓取生效。
+              </p>
+              <div class="form-grid">
+                <label>
+                  <span>arXiv 分类（逗号分隔，如 cs.CL, cs.IR）</span>
+                  <input type="text" id="profileCategories" placeholder="cs.CL, cs.IR, cs.LG" />
+                </label>
+                <label>
+                  <span>关键词（每行一个，可含空格短语）</span>
+                  <textarea id="profileKeywords" rows="4" placeholder="retrieval augmented generation&#10;long context"></textarea>
+                </label>
+                <label>
+                  <span>排除词（每行一个）</span>
+                  <textarea id="profileExcludes" rows="2" placeholder="survey"></textarea>
+                </label>
+                <label>
+                  <span>每日速递上限（5–200）</span>
+                  <input type="number" id="profileLimit" min="5" max="200" value="30" />
+                </label>
+              </div>
+              <div class="form-actions">
+                <button class="primary-button" id="saveProfileButton" type="button">保存画像</button>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <div class="settings-card-head">
+                <div>
+                  <div class="section-kicker">Services</div>
+                  <h2>服务状态</h2>
+                </div>
+                <div class="card-actions">
+                  <button class="soft-button" id="pushTestButton" type="button">推送自检</button>
+                  <button class="soft-button" id="refreshHealthButton" type="button">↻ 刷新</button>
+                </div>
+              </div>
+              <dl class="status-table" id="serviceStatus">
+                <div class="status-row"><dt>检查中…</dt></div>
+              </dl>
+              <div id="pushTestResult" class="push-test-result hidden"></div>
+              <p class="settings-note">
+                API Key、推送渠道与精读服务均在 <code>backend/.env</code> 配置（参考 <code>.env.example</code> 注释），改后重启生效。
+              </p>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

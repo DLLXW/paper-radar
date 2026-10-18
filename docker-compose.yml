@@ -1,0 +1,17 @@
+services:
+  paper-radar:
+    build: .
+    image: paper-radar:latest
+    container_name: paper-radar
+    ports:
+      - "8300:8300"
+    env_file:
+      # 可选：backend/.env 存在则自动载入（key 等凭证只进 env，不进镜像）
+      - path: backend/.env
+        required: false
+    volumes:
+      - radar-data:/data
+    restart: unless-stopped
+
+volumes:
+  radar-data:
