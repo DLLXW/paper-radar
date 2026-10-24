@@ -23,12 +23,13 @@ async def list_papers(
     date: str | None = Query(default=None, description="YYYY-MM-DD，缺省为今天"),
     status: str | None = Query(default=None, pattern="^(new|starred|dismissed)$"),
     min_score: float | None = Query(default=None, ge=0, le=100),
+    topic: str | None = Query(default=None, description="按 topic 名称精确筛选"),
     limit: int = Query(default=60, ge=1, le=200),
     start: int = Query(default=0, ge=0),
 ) -> PapersResponse:
     target_date = date or store.local_today()
     papers, total = store.list_papers(
-        date=target_date, status=status, min_score=min_score, limit=limit, start=start
+        date=target_date, status=status, min_score=min_score, topic=topic, limit=limit, start=start
     )
     has_more = start + limit < total
     return PapersResponse(

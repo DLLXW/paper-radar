@@ -24,6 +24,31 @@ WINDOW_OVERLAP = timedelta(hours=1)
 _state = {"running": False, "run_id": None, "started_at": None}
 
 
+def _parse_keyword(raw: str) -> tuple[str, list[str] | None]:
+    """解析关键词的 @分类 覆盖后缀：`scaling law @cs.IR` → ("scaling law", ["cs.IR"])。
+
+    后缀支持逗号分隔多个分类（`kw @cs.IR,cs.LG`）；不带后缀返回 (原文, None)。
+    """
+    text = raw.strip()
+    if "@" in text:
+        head, _, tail = text.rpartition("@")
+        cats = [c.strip() for c in tail.split(",") if c.strip()]
+        if cats and head.strip():
+            return head.strip(), cats
+    return text, None
+
+
+def _keyword_specs(profile: dict) -> list[tuple[str, list[str] | None]]:
+    """画像所有 topic 的关键词展开为 (关键词, 分类覆盖) 列表，保持画像顺序。"""
+    specs: list[tuple[str, list[str] | None]] = []
+    for topic in profile.get("topics") or []:
+        for raw in topic.get("keywords") or []:
+            keyword, override = _parse_keyword(raw)
+            if keyword:
+                specs.append((keyword, override))
+    return specs
+
+
 def is_running() -> bool:
     return _state["running"]
 
@@ -68,7 +93,7 @@ async def run_once(trigger: str = "manual") -> dict:
 
     today = store.local_today()
     profile = store.get_profile()
-    keywords = [k.strip() for k in profile["keywords"] if k.strip()]
+    keyword_specs = _keyword_specs(profile)
     categories = [c.strip() for c in profile["categories"] if c.strip()]
     excludes = [e.strip() for e in profile["exclude_keywords"] if e.strip()]
     daily_limit = int(profile["daily_limit"])
@@ -82,10 +107,10 @@ async def run_once(trigger: str = "manual") -> dict:
     try:
         fetched: dict[str, dict] = {}
         async with httpx.AsyncClient(timeout=45.0, follow_redirects=True) as client:
-            if keywords:
+            if keyword_specs:
                 # 显式时间窗 + max_results = 3 x 每日上限（禁止排序+截断的隐式窗口）
                 arxiv_papers, summary_queries = await fetch_arxiv_for_keywords(
-                    client, keywords, categories, window_start, window_end,
+                    client, keyword_specs, categories, window_start, window_end,
                     max_results=daily_limit * 3,
                 )
                 for paper in arxiv_papers:

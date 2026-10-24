@@ -915,3 +915,113 @@ code {
     margin-left: 0;
   }
 }
+
+/* ---------- topic 分组（方向 → topic → 关键词） ---------- */
+
+.chip.topic {
+  font-weight: 600;
+}
+
+.chip.topic.g0 {
+  background: rgba(15, 138, 109, 0.12);
+  border-color: rgba(15, 138, 109, 0.3);
+  color: var(--accent-strong);
+}
+
+.chip.topic.g1 {
+  background: rgba(58, 106, 205, 0.12);
+  border-color: rgba(58, 106, 205, 0.3);
+  color: #2f5cb8;
+}
+
+.chip.topic.g2 {
+  background: rgba(176, 122, 30, 0.12);
+  border-color: rgba(176, 122, 30, 0.3);
+  color: var(--amber);
+}
+
+.chip.topic.g3 {
+  background: rgba(140, 92, 180, 0.12);
+  border-color: rgba(140, 92, 180, 0.32);
+  color: #7a52a8;
+}
+
+/* 速递工具栏下的 topic 筛选 chips */
+.topic-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.topic-chip {
+  padding: 4px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.topic-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.topic-chip.active {
+  background: var(--accent-soft);
+  border-color: rgba(15, 138, 109, 0.35);
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+/* 设置页 topic 编辑器 */
+.topic-editor-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.topic-editor-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.topic-row {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.topic-row-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.topic-row-head .t-group {
+  flex: 2;
+}
+
+.topic-row-head .t-name {
+  flex: 3;
+}
+
+.topic-row .icon-button {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  line-height: 1;
+  color: var(--danger);
+}
+
+#topicEditor + #addTopicButton {
+  align-self: flex-start;
+}

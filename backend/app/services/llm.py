@@ -33,6 +33,7 @@ class ScoreItem(BaseModel):
     score: float
     reason: str
     summary: str = ""
+    topic: str | None = None
 
 
 class ScoreResponse(BaseModel):
@@ -59,11 +60,34 @@ def truncate_at_sentence(text: str, limit: int = ABSTRACT_CHAR_LIMIT) -> str:
     return cut.rstrip() + "…"
 
 
+def _topic_block(profile: dict) -> list[str]:
+    """画像中的 topic 列表 → prompt 行（方向/名称/描述/关键词）。"""
+    lines = ["研究画像（按方向与 topic 组织，论文应归入其中一个 topic）："]
+    for t in profile.get("topics") or []:
+        head = f"- [{t.get('group') or '未分组'}] {t['name']}"
+        if t.get("description"):
+            head += f"：{t['description']}"
+        lines.append(head)
+        if t.get("keywords"):
+            lines.append(f"  关键词：{'、'.join(t['keywords'])}")
+    return lines
+
+
+_NULL_TOPIC_TOKENS = {"", "null", "none", "无", "未分类", "n/a", "na"}
+
+
+def _normalize_topic(raw: str | None, valid_names: set[str]) -> str | None:
+    """LLM 输出的 topic → 画像内的 topic 名；不在画像内或为空则归为未分类。"""
+    name = (raw or "").strip()
+    if name.lower() in _NULL_TOPIC_TOKENS:
+        return None
+    return name if name in valid_names else None
+
+
 def _build_user_content(profile: dict, papers: list[dict]) -> str:
-    lines = [
-        "研究画像：",
-        f"- arXiv 分类：{'、'.join(profile.get('categories') or []) or '（不限）'}",
-        f"- 关注关键词：{'、'.join(profile.get('keywords') or []) or '（不限）'}",
+    lines = _topic_block(profile)
+    lines += [
+        f"- arXiv 分类范围：{'、'.join(profile.get('categories') or []) or '（不限）'}",
         f"- 排除方向：{'、'.join(profile.get('exclude_keywords') or []) or '（无）'}",
         "",
         "论文列表：",
@@ -78,13 +102,17 @@ def _build_user_content(profile: dict, papers: list[dict]) -> str:
         if len("\n".join(lines)) + len(block) > budget:
             break
         lines.append(block)
+    topic_names = "、".join(t["name"] for t in (profile.get("topics") or [])) or "（无 topic，填 null）"
     lines.append(
         "\n请对上面列出的每一篇论文输出："
-        "① 相关度分数（0-100 整数，越高越相关）；"
-        "② 一句话理由（不超过50字中文）；"
-        "③ 中文摘要（2-4 句，150 字以内：解决什么问题、核心方法、关键结果或贡献；"
+        "① 相关度分数（0-100 整数，衡量论文与你研究画像整体的契合度，越高越相关）；"
+        "② topic：从下列名称中选一个最契合的：" + topic_names +
+        "；全都不契合时填 null；"
+        "③ 一句话理由（不超过50字中文，可点出与哪个 topic 相关）；"
+        "④ 中文摘要（2-4 句，150 字以内：解决什么问题、核心方法、关键结果或贡献；"
         "基于标题与摘要归纳，术语与模型名保留英文）。"
-        '返回 JSON：{"scores":[{"id":"论文id","score":整数,"reason":"...","summary":"..."}]}，'
+        '返回 JSON：{"scores":[{"id":"论文id","score":整数,"topic":"topic名或null",'
+        '"reason":"...","summary":"..."}]}，'
         "必须覆盖列出的所有 id，不要输出其他内容。"
     )
     return "\n".join(lines)
@@ -150,6 +178,7 @@ async def score_papers(papers: list[dict], profile: dict) -> tuple[int, int]:
         return 0, 0
 
     scored = 0
+    valid_topics = {t["name"] for t in (profile.get("topics") or []) if t.get("name")}
     async with httpx.AsyncClient(timeout=120.0) as client:
         for i in range(0, len(papers), BATCH_SIZE):
             batch = papers[i : i + BATCH_SIZE]
@@ -173,7 +202,8 @@ async def score_papers(papers: list[dict], profile: dict) -> tuple[int, int]:
             else:
                 for item in items:
                     score = max(0, min(100, round(float(item.score))))
-                    set_paper_score(item.id, score, item.reason.strip(), item.summary.strip())
+                    topic = _normalize_topic(item.topic, valid_topics)
+                    set_paper_score(item.id, score, item.reason.strip(), item.summary.strip(), topic=topic)
                     scored += 1
             if i + BATCH_SIZE < len(papers):
                 await asyncio.sleep(BATCH_SLEEP_SECONDS)

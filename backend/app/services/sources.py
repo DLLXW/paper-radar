@@ -145,7 +145,7 @@ def _to_utc_iso(raw: str) -> str:
 
 async def fetch_arxiv_for_keywords(
     client: httpx.AsyncClient,
-    keywords: list[str],
+    keyword_specs: list[tuple[str, list[str] | None]],
     categories: list[str],
     window_start: datetime,
     window_end: datetime,
@@ -153,12 +153,14 @@ async def fetch_arxiv_for_keywords(
 ) -> tuple[list[dict], list[dict]]:
     """逐关键词查询。返回 (合并去重后的论文列表, 每个查询的结果数)。
 
+    keyword_specs 为 (清洗后关键词, 分类覆盖或 None) 列表；覆盖时该关键词只在指定
+    分类内查询（如 "scaling law @cs.IR"），否则用全局 categories。
     单个查询失败仅记日志（防坑 5）；合并时累加 matched_keywords。
     """
     merged: dict[str, dict] = {}
     per_query: list[dict] = []
-    for keyword in keywords:
-        query = build_arxiv_query(keyword, categories, window_start, window_end)
+    for keyword, override in keyword_specs:
+        query = build_arxiv_query(keyword, override or categories, window_start, window_end)
         params = {
             "search_query": query,
             "sortBy": "submittedDate",

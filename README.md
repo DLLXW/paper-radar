@@ -67,7 +67,7 @@ echo 'RADAR_LLM_API_KEY=sk-xxx' > backend/.env && docker compose up --build -d
 
 ## ⚙️ 配置
 
-唯一必填 `RADAR_LLM_API_KEY`（[DeepSeek 申请](https://platform.deepseek.com/)，或任何 OpenAI 兼容端点——vLLM / Ollama 也行）。研究画像存数据库、网页里改，不进配置文件。
+唯一必填 `RADAR_LLM_API_KEY`（[DeepSeek 申请](https://platform.deepseek.com/)，或任何 OpenAI 兼容端点——vLLM / Ollama 也行）。研究画像存数据库、网页里改，不进配置文件。画像按「方向 → topic → 关键词」组织：可同时追多个研究方向，LLM 打分时自动把论文归入 topic，推送与 digest 按方向分组；关键词支持 `@分类` 后缀限定查询范围（如 `scaling law @cs.IR` 只在搜推广分类里查，避免泛词洪泛）。
 
 | 变量 | 默认 | 说明 |
 |---|---|---|

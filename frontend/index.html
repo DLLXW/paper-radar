@@ -71,6 +71,7 @@
                 <button class="primary-button" id="fetchButton" type="button">🛰 立即抓取</button>
               </div>
             </div>
+            <div id="topicFilter" class="topic-filter hidden"></div>
           </header>
 
           <div id="runBanner" class="run-banner hidden"></div>
@@ -101,17 +102,18 @@
                 <span class="hint-inline" id="profileSaved"></span>
               </div>
               <p class="settings-note">
-                关键词与 arXiv 分类共同决定抓取查询；排除词命中标题或摘要的论文会被过滤。修改后下一次抓取生效。
+                画像按「方向 → topic → 关键词」组织：抓取按关键词查 arXiv，LLM 打分时同时把论文归入 topic，推送按方向分组。关键词可用 <code>@分类</code> 后缀限定查询范围（如 <code>scaling law @cs.IR</code>）；排除词命中标题或摘要的论文会被过滤。修改后下一次抓取生效。
               </p>
               <div class="form-grid">
                 <label>
-                  <span>arXiv 分类（逗号分隔，如 cs.CL, cs.IR）</span>
-                  <input type="text" id="profileCategories" placeholder="cs.CL, cs.IR, cs.LG" />
+                  <span>arXiv 分类（逗号分隔，无 @ 后缀关键词的默认范围，如 cs.LG, cs.IR, stat.ML）</span>
+                  <input type="text" id="profileCategories" placeholder="cs.LG, cs.IR, stat.ML" />
                 </label>
-                <label>
-                  <span>关键词（每行一个，可含空格短语）</span>
-                  <textarea id="profileKeywords" rows="4" placeholder="retrieval augmented generation&#10;long context"></textarea>
-                </label>
+                <div class="topic-editor-block">
+                  <span class="topic-editor-title">方向 / topic / 关键词（最多 12 个 topic）</span>
+                  <div id="topicEditor"></div>
+                  <button class="soft-button" id="addTopicButton" type="button">＋ 添加 topic</button>
+                </div>
                 <label>
                   <span>排除词（每行一个）</span>
                   <textarea id="profileExcludes" rows="2" placeholder="survey"></textarea>

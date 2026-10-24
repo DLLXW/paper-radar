@@ -19,6 +19,7 @@ class PaperOut(BaseModel):
     score: float | None
     reason: str | None
     summary: str | None
+    topic: str | None
     matched_keywords: list[str]
     status: str
     read_doc_name: str | None

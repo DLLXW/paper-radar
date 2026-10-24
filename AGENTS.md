@@ -31,14 +31,19 @@ PaperRadar（论文雷达）：每日定时抓取 arXiv 与 Hugging Face Daily P
     feedparser（xml.etree 解析 Atom）、SQLAlchemy/ORM（用 stdlib `sqlite3`）、前端框架。
 - 存储：stdlib `sqlite3`，单文件库；表：papers / runs / profile。
 - 配置：pydantic-settings，env 前缀 `RADAR_`，`.env.example` 全注释。
-  **唯一必填 `RADAR_LLM_API_KEY`**；研究画像（分类/关键词/排除词/每日上限）不进 env，
-  存数据库并经 UI 设置面板编辑；其余（抓取时刻、推送渠道、reader 地址、保留天数）均为可选 env。
+  **唯一必填 `RADAR_LLM_API_KEY`**；研究画像不进 env，存数据库并经 UI 设置面板编辑。
+  画像按「方向(group) → topic → 关键词」三层组织（`profile.topics`，上限 12 topic /
+  单 topic 10 词 / 全局 60 词 + 20 分类）：LLM 打分时同时把论文归入 topic
+  （`papers.topic` 列，不在画像内的归 NULL），推送与 digest 按 方向→topic 两级分组；
+  关键词支持 `@分类` 后缀做单查询分类覆盖（如 `scaling law @cs.IR`，逗号分隔多个），
+  无后缀关键词用全局分类过滤；旧库扁平 keywords 读取时自动迁移为单个默认 topic。
+  其余（抓取时刻、推送渠道、reader 地址、保留天数）均为可选 env。
 
 ## API 设计（已确认，勿随意改形态）
 
 所有路由前缀 `/api`；输入统一过 `normalize_paper_input()`（接受 arxiv.org/abs、/pdf、HF 链接、裸 id 含版本号）。
 
-- `GET /api/papers?date=&status=&min_score=&limit=` — 排序：score desc（null 最后）→ published desc
+- `GET /api/papers?date=&status=&min_score=&topic=&limit=` — 排序：score desc（null 最后）→ published desc；topic 为画像 topic 名精确过滤
 - `GET /api/papers/status` — { running, last_run_at, last_run_summary{fetched, scored, alerted}, next_run_at }
 - `POST /api/papers/fetch` — 手动触发一轮抓取+打分；已在跑返回 409
 - `GET /api/profile` / `PUT /api/profile` — 研究画像读写
@@ -81,6 +86,7 @@ PaperRadar（论文雷达）：每日定时抓取 arXiv 与 Hugging Face Daily P
 `id`（裸 arXiv id, PK）、`version`、`kind`（paper | version_update）、`source`（arxiv | hf_daily）、
 `title`、`authors`(list)、`abstract`、`categories`(list)、`primary_category`、`arxiv_url`、`pdf_url`、
 `published_at`、`first_seen_at`、`fetched_date`、`score`(REAL NULL)、`reason`(TEXT NULL)、
+`summary`(TEXT NULL)、`topic`(TEXT NULL，LLM 归类的画像 topic 名)、
 `matched_keywords`(list)、`status`（new | starred | dismissed）、`read_doc_name`(NULL)、
 `created_at`、`updated_at`。
 

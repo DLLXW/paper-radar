@@ -7,12 +7,15 @@ const state = {
   date: todayStr(),
   status: "",
   minScore: "",
+  topic: "",
   start: 0,
   papers: [],
   total: 0,
   hasNext: false,
   nextStart: null,
   health: null,
+  topics: [], // 画像 topics，用于筛选 chips 与卡片徽章的方向着色
+  topicIndex: {}, // topic 名 → { group, gi }
   wasRunning: false,
   pollTimer: null,
 };
@@ -97,6 +100,14 @@ function dateBadge(publishedAt) {
   return `<span class="chip" title="${pub}">${days} 天前</span>`;
 }
 
+function topicChip(paper) {
+  if (!paper.topic) return "";
+  const info = state.topicIndex[paper.topic];
+  const gi = info ? info.gi : 3;
+  const group = info ? info.group : "";
+  return `<span class="chip topic g${gi}" title="${escapeHtml(group || "未分组方向")}">🧭 ${escapeHtml(paper.topic)}</span>`;
+}
+
 function renderPaperCard(paper, index) {
   const tier = scoreTier(paper.score);
   const scoreValue = paper.score === null || paper.score === undefined ? "—" : Math.round(paper.score);
@@ -143,6 +154,7 @@ function renderPaperCard(paper, index) {
             <a href="${escapeHtml(paper.arxiv_url)}" target="_blank" rel="noopener">${escapeHtml(paper.title)}</a>
           </h3>
           <div class="paper-meta">
+            ${topicChip(paper)}
             ${sourceChip}
             ${venueChip}
             ${dateBadge(paper.published_at)}
@@ -232,6 +244,7 @@ async function loadDigest({ append = false } = {}) {
   const params = new URLSearchParams({ date: state.date, limit: 60, start: state.start });
   if (state.status) params.set("status", state.status);
   if (state.minScore) params.set("min_score", state.minScore);
+  if (state.topic) params.set("topic", state.topic);
   try {
     const data = await fetchJson(`/papers?${params}`);
     state.total = data.total;
@@ -454,6 +467,44 @@ minScoreSelect.addEventListener("change", () => {
   loadDigest();
 });
 
+// ---------- topic 筛选 ----------
+
+const topicFilter = document.querySelector("#topicFilter");
+
+function applyTopicIndex() {
+  const groups = [];
+  const index = {};
+  for (const t of state.topics) {
+    const group = t.group || "未分组方向";
+    if (!groups.includes(group)) groups.push(group);
+    index[t.name] = { group, gi: groups.indexOf(group) % 4 };
+  }
+  state.topicIndex = index;
+}
+
+function renderTopicFilter() {
+  applyTopicIndex();
+  if (!state.topics.length) {
+    topicFilter.classList.add("hidden");
+    topicFilter.innerHTML = "";
+    return;
+  }
+  const chips = state.topics.map(
+    (t) =>
+      `<button class="topic-chip${state.topic === t.name ? " active" : ""}" data-topic-name="${escapeHtml(t.name)}" type="button" title="${escapeHtml(t.group || "")}">${escapeHtml(t.name)}</button>`
+  );
+  topicFilter.innerHTML = `<button class="topic-chip${state.topic ? "" : " active"}" data-topic-name="" type="button">全部 topic</button>${chips.join("")}`;
+  topicFilter.classList.remove("hidden");
+}
+
+topicFilter.addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-topic-name]");
+  if (!chip) return;
+  state.topic = chip.dataset.topicName;
+  renderTopicFilter();
+  loadDigest();
+});
+
 refreshButton.addEventListener("click", () => loadDigest());
 
 loadMoreButton.addEventListener("click", () => {
@@ -558,22 +609,68 @@ pushTestButton.addEventListener("click", async () => {
   }
 });
 
-// ---------- 画像表单 ----------
+// ---------- 画像表单（方向 → topic → 关键词） ----------
 
 const profileCategories = document.querySelector("#profileCategories");
-const profileKeywords = document.querySelector("#profileKeywords");
 const profileExcludes = document.querySelector("#profileExcludes");
 const profileLimit = document.querySelector("#profileLimit");
 const saveProfileButton = document.querySelector("#saveProfileButton");
 const profileSaved = document.querySelector("#profileSaved");
+const topicEditor = document.querySelector("#topicEditor");
+const addTopicButton = document.querySelector("#addTopicButton");
+
+const EMPTY_TOPIC = { group: "", name: "", description: "", keywords: [] };
+
+function topicRowHtml(topic) {
+  return `
+    <div class="topic-row" data-topic-row>
+      <div class="topic-row-head">
+        <input class="t-group" type="text" placeholder="方向，如：用增权益与因果" value="${escapeHtml(topic.group || "")}" />
+        <input class="t-name" type="text" placeholder="topic 名称，如：DFL/决策一体化" value="${escapeHtml(topic.name || "")}" />
+        <button class="icon-button" data-topic-action="remove" type="button" title="删除该 topic">✕</button>
+      </div>
+      <input class="t-desc" type="text" placeholder="一句话描述（进入 LLM 打分提示，可留空）" value="${escapeHtml(topic.description || "")}" />
+      <textarea class="t-keywords" rows="3" placeholder="关键词，每行一个；可加 @分类 限定，如：&#10;decision-focused learning&#10;scaling law @cs.IR">${escapeHtml((topic.keywords || []).join("\n"))}</textarea>
+    </div>`;
+}
+
+function renderTopicEditor(topics) {
+  topicEditor.innerHTML = topics.map(topicRowHtml).join("");
+}
+
+function readTopics() {
+  return [...topicEditor.querySelectorAll("[data-topic-row]")].map((row) => ({
+    group: row.querySelector(".t-group").value.trim(),
+    name: row.querySelector(".t-name").value.trim(),
+    description: row.querySelector(".t-desc").value.trim(),
+    keywords: row
+      .querySelector(".t-keywords")
+      .value.split(/\n/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  }));
+}
+
+addTopicButton.addEventListener("click", () => {
+  topicEditor.insertAdjacentHTML("beforeend", topicRowHtml(EMPTY_TOPIC));
+});
+
+topicEditor.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-topic-action='remove']");
+  if (!button) return;
+  button.closest("[data-topic-row]").remove();
+});
 
 async function loadProfile() {
   try {
     const profile = await fetchJson("/profile");
     profileCategories.value = (profile.categories || []).join(", ");
-    profileKeywords.value = (profile.keywords || []).join("\n");
+    const topics = profile.topics && profile.topics.length ? profile.topics : [EMPTY_TOPIC];
+    renderTopicEditor(topics);
     profileExcludes.value = (profile.exclude_keywords || []).join("\n");
     profileLimit.value = profile.daily_limit;
+    state.topics = profile.topics || [];
+    renderTopicFilter();
   } catch (error) {
     profileSaved.textContent = `画像加载失败：${error.message}`;
   }
@@ -585,10 +682,7 @@ saveProfileButton.addEventListener("click", async () => {
       .split(/[,\n]/)
       .map((s) => s.trim())
       .filter(Boolean),
-    keywords: profileKeywords.value
-      .split(/\n/)
-      .map((s) => s.trim())
-      .filter(Boolean),
+    topics: readTopics(),
     exclude_keywords: profileExcludes.value
       .split(/\n/)
       .map((s) => s.trim())
@@ -597,11 +691,13 @@ saveProfileButton.addEventListener("click", async () => {
   };
   saveProfileButton.disabled = true;
   try {
-    await fetchJson("/profile", {
+    const saved = await fetchJson("/profile", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    state.topics = saved.topics || [];
+    renderTopicFilter();
     profileSaved.textContent = "已保存 ✓ 下次抓取生效";
     setTimeout(() => (profileSaved.textContent = ""), 4000);
   } catch (error) {

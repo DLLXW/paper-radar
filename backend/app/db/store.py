@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS papers (
     score             REAL,               -- NULL = 未打分/打分失败
     reason            TEXT,
     summary           TEXT,               -- LLM 中文摘要（基于标题+摘要归纳）
+    topic             TEXT,               -- LLM 归类的 topic 名（画像 topics[].name），NULL = 未分类
     matched_keywords  TEXT NOT NULL DEFAULT '[]',     -- JSON list
     status            TEXT NOT NULL DEFAULT 'new',    -- new | starred | dismissed
     read_doc_name     TEXT,
@@ -60,7 +61,8 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE TABLE IF NOT EXISTS profile (
     id               INTEGER PRIMARY KEY CHECK (id = 1),
     categories       TEXT NOT NULL DEFAULT '[]',   -- JSON list，如 ["cs.CL"]
-    keywords         TEXT NOT NULL DEFAULT '[]',   -- JSON list
+    keywords         TEXT NOT NULL DEFAULT '[]',   -- JSON list（旧版扁平结构，已由 topics 取代）
+    topics           TEXT NOT NULL DEFAULT '[]',   -- JSON list[{group,name,description,keywords}]
     exclude_keywords TEXT NOT NULL DEFAULT '[]',   -- JSON list
     daily_limit      INTEGER NOT NULL DEFAULT 30,
     updated_at       TEXT NOT NULL
@@ -101,6 +103,14 @@ def init_db() -> None:
             pass
         try:  # 旧库迁移：打分层 v2 增加的 summary 列
             conn.execute("ALTER TABLE papers ADD COLUMN summary TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:  # 旧库迁移：topic 分组功能增加的列
+            conn.execute("ALTER TABLE papers ADD COLUMN topic TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:  # 旧库迁移：profile 表增加 topics 列
+            conn.execute("ALTER TABLE profile ADD COLUMN topics TEXT NOT NULL DEFAULT '[]'")
         except sqlite3.OperationalError:
             pass
         conn.commit()
@@ -210,6 +220,7 @@ def list_papers(
     date: str | None = None,
     status: str | None = None,
     min_score: float | None = None,
+    topic: str | None = None,
     limit: int = 60,
     start: int = 0,
 ) -> tuple[list[dict], int]:
@@ -223,6 +234,9 @@ def list_papers(
     if min_score is not None:
         where.append("score >= ?")
         params.append(min_score)
+    if topic:
+        where.append("topic = ?")
+        params.append(topic)
     clause = f"WHERE {' AND '.join(where)}" if where else ""
     with closing(get_conn()) as conn:
         total = conn.execute(
@@ -257,11 +271,17 @@ def update_paper_status(paper_id: str, status: str) -> dict | None:
     return get_paper(paper_id)
 
 
-def set_paper_score(paper_id: str, score: float | None, reason: str | None, summary: str | None = None) -> None:
+def set_paper_score(
+    paper_id: str,
+    score: float | None,
+    reason: str | None,
+    summary: str | None = None,
+    topic: str | None = None,
+) -> None:
     with closing(get_conn()) as conn:
         conn.execute(
-            "UPDATE papers SET score = ?, reason = ?, summary = ?, updated_at = ? WHERE id = ?",
-            (score, reason, summary, utc_now_iso(), paper_id),
+            "UPDATE papers SET score = ?, reason = ?, summary = ?, topic = ?, updated_at = ? WHERE id = ?",
+            (score, reason, summary, topic, utc_now_iso(), paper_id),
         )
         conn.commit()
 
@@ -387,7 +407,14 @@ def prune_runs(keep: int = 100) -> None:
 
 PROFILE_DEFAULTS = {
     "categories": ["cs.CL", "cs.IR", "cs.LG"],
-    "keywords": ["large language model", "retrieval augmented generation", "agent"],
+    "topics": [
+        {
+            "group": "大模型与检索",
+            "name": "LLM 与 RAG",
+            "description": "大模型、检索增强生成与智能体相关研究",
+            "keywords": ["large language model", "retrieval augmented generation", "agent"],
+        }
+    ],
     "exclude_keywords": [],
     "daily_limit": 30,
 }
@@ -401,28 +428,44 @@ def get_profile() -> dict:
         save_profile(**PROFILE_DEFAULTS)
         return {**PROFILE_DEFAULTS, "updated_at": utc_now_iso()}
     profile = dict(row)
-    for field in ("categories", "keywords", "exclude_keywords"):
+    for field in ("categories", "keywords", "topics", "exclude_keywords"):
         try:
             profile[field] = json.loads(profile.get(field) or "[]")
         except (TypeError, ValueError):
             profile[field] = []
+    # 旧库迁移：扁平 keywords → 包成一个默认 topic（读时升级并回写）
+    if not profile.get("topics") and profile.get("keywords"):
+        profile["topics"] = [
+            {
+                "group": "默认方向",
+                "name": "未分组",
+                "description": "旧版扁平关键词迁移而来，请在设置面板重新组织",
+                "keywords": profile["keywords"],
+            }
+        ]
+        save_profile(
+            profile["categories"], profile["topics"],
+            profile["exclude_keywords"], profile["daily_limit"],
+        )
+        profile["updated_at"] = utc_now_iso()
+    profile.pop("keywords", None)
     return profile
 
 
 def save_profile(
-    categories: list[str], keywords: list[str], exclude_keywords: list[str], daily_limit: int
+    categories: list[str], topics: list[dict], exclude_keywords: list[str], daily_limit: int
 ) -> dict:
     now = utc_now_iso()
     with closing(get_conn()) as conn:
         conn.execute(
-            """INSERT INTO profile (id, categories, keywords, exclude_keywords, daily_limit, updated_at)
+            """INSERT INTO profile (id, categories, topics, exclude_keywords, daily_limit, updated_at)
                VALUES (1, ?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET categories = excluded.categories,
-                 keywords = excluded.keywords, exclude_keywords = excluded.exclude_keywords,
+                 topics = excluded.topics, exclude_keywords = excluded.exclude_keywords,
                  daily_limit = excluded.daily_limit, updated_at = excluded.updated_at""",
             (
                 json.dumps(categories, ensure_ascii=False),
-                json.dumps(keywords, ensure_ascii=False),
+                json.dumps(topics, ensure_ascii=False),
                 json.dumps(exclude_keywords, ensure_ascii=False),
                 daily_limit,
                 now,
@@ -431,7 +474,7 @@ def save_profile(
         conn.commit()
     return {
         "categories": categories,
-        "keywords": keywords,
+        "topics": topics,
         "exclude_keywords": exclude_keywords,
         "daily_limit": daily_limit,
         "updated_at": now,
